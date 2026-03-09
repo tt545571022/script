@@ -23,33 +23,64 @@ get_process_runtime() {
     fi
 }
 
+# 并行查询进程信息并按原顺序输出
+# $1: 正则表达式用于匹配进程行
+# $2: awk 字段分隔符（为空则不传 -F）
+# $3: awk 程序，用于从匹配行中提取 PID
+# stdin: smi 命令输出
+run_parallel() {
+    local proc_pattern="$1"
+    local awk_fs="$2"
+    local awk_prog="$3"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local bg_pids=()
+
+    mapfile -t lines
+
+    for i in "${!lines[@]}"; do
+        line="${lines[$i]}"
+        if echo "$line" | grep -Eq "$proc_pattern"; then
+            if [ -n "$awk_fs" ]; then
+                pid=$(echo "$line" | awk -F "$awk_fs" "$awk_prog" | xargs)
+            else
+                pid=$(echo "$line" | awk "$awk_prog" | xargs)
+            fi
+            (
+                runtime=$(get_process_runtime "$pid")
+                container_name=$(get_container_name "$pid")
+                printf '%s' "${runtime} | ${container_name}" > "${tmpdir}/${i}"
+            ) &
+            bg_pids+=($!)
+        fi
+    done
+
+    for p in "${bg_pids[@]}"; do wait "$p"; done
+
+    for i in "${!lines[@]}"; do
+        if [ -f "${tmpdir}/${i}" ]; then
+            echo "${lines[$i]}   $(cat "${tmpdir}/${i}")"
+        else
+            echo "${lines[$i]}"
+        fi
+    done
+
+    rm -rf "$tmpdir"
+}
+
 # 自动识别硬件类型并进行查询
 if command -v npu-smi >/dev/null 2>&1; then
     # Ascend NPU
-    npu-smi info | while IFS= read -r line; do
-        if echo "$line" | grep -Eq '\|\ *[0-9]{1,2}\ +[0-9]\ +\|\ *[0-9]+\ *\|\ *.*\|\ *[0-9]+\ *\|'; then
-            pid=$(echo "$line" | awk -F '|' '{print $3}' | xargs)
-            runtime=$(get_process_runtime "$pid")
-            container_name=$(get_container_name "$pid")
-            echo "${line}   ${runtime} | ${container_name}"
-        else
-            echo "${line}"
-        fi
-    done
+    npu-smi info | run_parallel \
+        '\|\ *[0-9]{1,2}\ +[0-9]\ +\|\ *[0-9]+\ *\|\ *.*\|\ *[0-9]+\ *\|' \
+        '|' \
+        '{print $3}'
 elif command -v nvidia-smi >/dev/null 2>&1; then
-    # NVIDIA GPU
-    nvidia-smi | while IFS= read -r line; do
-        # 匹配 NVIDIA 进程行，形态如: |    0   N/A  N/A      1234      C   python      100MiB |
-        if echo "$line" | grep -Eq '\|\s+[0-9]+\s+.*[0-9]+\s+[CG]\s+.*\|'; then
-            # 提取 PID: 查找 Type (C/G/C+G) 前面的那个字段
-            pid=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^(C|G|C\+G)$/) print $(i-1)}')
-            runtime=$(get_process_runtime "$pid")
-            container_name=$(get_container_name "$pid")
-            echo "${line}   ${runtime} | ${container_name}"
-        else
-            echo "${line}"
-        fi
-    done
+    # NVIDIA GPU，提取 Type(C/G/C+G) 前面的字段作为 PID
+    nvidia-smi | run_parallel \
+        '\|\s+[0-9]+\s+.*[0-9]+\s+[CG]\s+.*\|' \
+        '' \
+        '{for(i=1;i<=NF;i++) if($i ~ /^(C|G|C\+G)$/) print $(i-1)}'
 else
     echo "未检测到 npu-smi 或 nvidia-smi 命令，请确保已安装驱动及相关工具。"
     exit 1
