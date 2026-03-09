@@ -1,7 +1,10 @@
 #! /bin/bash
 user=tjl
-name=kolors
-image=swr.cn-south-1.myhuaweicloud.com/ascendhub/mindie:2.1.RC1-800I-A2-py311-openeuler24.03-lts
+name=lmcahce1501
+# image=vllm-ascend-ucm:v0.9.2rc1
+# image=m.daocloud.io/quay.io/ascend/vllm-ascend:glm5
+ image=quay.io/ascend/vllm-ascend:v0.15.0rc1
+# image=swr.cn-south-1.myhuaweicloud.com/ascendhub/mindie:2.2.RC1-800I-A2-py311-openeuler24.03-lts
 
 docker run -itd -u root \
 	--shm-size=500g \
@@ -34,8 +37,7 @@ docker run -itd -u root \
 -v /var/log/npu/:/usr/slog \
 -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi \
 -v /home/tjl:/home/tjl \
--v /data/tjl:/data/tjl \
--v /data/weight:/data/weight \
+-v /data:/data \
 -v /data2/weights:/data2/weights \
 -v /usr/local/sbin/:/ust/local/sbin/ \
 -v /usr/loacal/Ascend/add-ons/:/usr/local/Ascend/add-ons \
