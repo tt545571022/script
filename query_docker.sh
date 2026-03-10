@@ -14,14 +14,14 @@ fi
 if command -v npu-smi >/dev/null 2>&1; then
     smi_cmd="npu-smi info"
     proc_re='\| *[0-9]{1,2} +[0-9] +\| *[0-9]+ *\| .*\| *[0-9]+ *\|'
-    get_pid() { IFS='|' read -ra _f <<< "$1"; echo "${_f[2]// /}"; }
+    get_pid() { IFS='|' read -ra _f <<< "$1"; _pid="${_f[2]// /}"; }
 elif command -v nvidia-smi >/dev/null 2>&1; then
     smi_cmd="nvidia-smi"
     proc_re='\|\s+[0-9]+\s+.*[0-9]+\s+[CG]\s+.*\|'
     get_pid() {
         local _t; read -ra _t <<< "$1"
         for _j in "${!_t[@]}"; do
-            [[ "${_t[$_j]}" =~ ^(C|G|C\+G)$ ]] && echo "${_t[$((_j-1))]}" && return
+            [[ "${_t[$_j]}" =~ ^(C|G|C\+G)$ ]] && _pid="${_t[$((_j-1))]}" && return
         done
     }
 else
@@ -41,10 +41,15 @@ while IFS=$'\t' read -r cid name; do
     cid_name["$cid"]="$name"
 done < <(docker ps --no-trunc --format $'{{.ID}}\t{{.Names}}' 2>/dev/null)
 
+# 与 smi 并行：批量获取所有进程运行时长
+declare -A rt=()
+while read -r ppid petime; do rt["$ppid"]="$petime"; done \
+    < <(ps -e -o pid=,etime= 2>/dev/null)
+
 wait "$smi_bg"
 mapfile -t lines < "$tmp"
 
-# 通过 cgroup 查 pid 对应容器名（纯 bash 读文件，缺失时补 docker inspect）
+# 通过 cgroup 查 pid 对应容器名，结果写入全局 _container（零 fork）
 pid_to_container() {
     local pid=$1 cid="" cgline
     while IFS= read -r cgline; do
@@ -54,7 +59,7 @@ pid_to_container() {
         local n; n=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null)
         cid_name["$cid"]="${n#/}"
     fi
-    echo "${cid_name[$cid]}"
+    _container="${cid_name[$cid]}"
 }
 
 # ── Kill 模式 ─────────────────────────────────────────────────────────────────
@@ -62,8 +67,9 @@ if [[ -n "$kill_target" ]]; then
     declare -a target_pids=()
     for line in "${lines[@]}"; do
         [[ "$line" =~ $proc_re ]] || continue
-        pid=$(get_pid "$line"); [[ -z "$pid" ]] && continue
-        [[ "$(pid_to_container "$pid")" == "$kill_target" ]] && target_pids+=("$pid")
+        get_pid "$line"; [[ -z "$_pid" ]] && continue
+        pid_to_container "$_pid"
+        [[ "$_container" == "$kill_target" ]] && target_pids+=("$_pid")
     done
     if [[ ${#target_pids[@]} -eq 0 ]]; then
         echo "未找到容器 '$kill_target' 占用 NPU/GPU 的进程"; exit 1
@@ -76,14 +82,11 @@ if [[ -n "$kill_target" ]]; then
 fi
 
 # ── 查询模式 ──────────────────────────────────────────────────────────────────
-declare -A rt=()
-while read -r ppid petime; do rt["$ppid"]="$petime"; done \
-    < <(ps -e -o pid=,etime= 2>/dev/null)
-
 for line in "${lines[@]}"; do
     if [[ "$line" =~ $proc_re ]]; then
-        pid=$(get_pid "$line")
-        echo "$line   ${rt[$pid]:-N/A} | $(pid_to_container "$pid")"
+        get_pid "$line"
+        pid_to_container "$_pid"
+        printf '%s %+10s | %s\n' "$line" "${rt[$_pid]:-N/A}" "$_container"
     else
         echo "$line"
     fi
