@@ -3,9 +3,12 @@
 # ==============================================================================
 # 默认参数配置 (Default Configuration)
 # ==============================================================================
-model_path="/date/GLM/GLM-5-w4a8"
-svc_model_name="glm-5"
-port=8077
+MODEL_PATH=/home/tjl/pard/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
+SERVER_NAME=hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
+port=5678
+
+# MODEL_PATH="/nfs_data/weight/Qwen3-8B"
+# SERVER_NAME="Qwen3-8B"
 
 random_range_ratio=0
 random_range_ratio_percent=0
@@ -16,7 +19,16 @@ random_range_ratio_percent=0
 # ==============================================================================
 params=(
     "8 8 8 128 128"         # just for test
-    "16 8 8 128 128"         # just for test
+    "1 1 1 32000 16"         # just for test
+    "1 1 1 32000 16"         # just for test
+    "2 2 2 32000 16"         # just for test
+    "2 2 2 32000 16"         # just for test
+    "16 16 16 32000 16"         # just for test
+    "16 16 16 32000 16"         # just for test
+    # "16 16 16 131072 1024"         # just for test
+    # "16 16 16 131072 1024"         # just for test
+    # "128 128 128 32000 16"         # just for test
+    # "128 128 128 32000 16"         # just for test
     # "32 32 64 128 128"
     # "64 64 128 128 128"
     # "128 128 256 128 128"
@@ -83,12 +95,17 @@ params=(
 # ==============================================================================
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -m|--model_path) model_path="$2"; shift ;;
-        -s|--server-name) svc_model_name="$2"; shift ;;
-        -p|--port) port="$2"; shift ;;
-        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+        -m|--model_path) MODEL_PATH="$2"; shift 2 ;;
+        -s|--server-name) SERVER_NAME="$2"; shift 2 ;;
+        -p|--port) port="$2"; shift 2 ;;
+        -*) echo "Unknown parameter passed: $1"
+            echo "Usage: $0 [-m|--model_path <path>] [-s|--server-name <name>] [-p|--port <port>]"
+            echo "  -m, --model_path    模型权重路径 (默认: $MODEL_PATH)"
+            echo "  -s, --server-name   vllm served-model-name (默认: $SERVER_NAME)"
+            echo "  -p, --port          服务端口号 (默认: $port)"
+            exit 1 ;;
+        *) shift ;;  # 跳过位置参数
     esac
-    shift
 done
 
 # ==============================================================================
@@ -130,8 +147,8 @@ run_benchmark() {
     local benchmark_result=$(
             vllm bench serve \
             --backend vllm \
-            --model $svc_model_name \
-            --tokenizer $model_path \
+            --model $SERVER_NAME \
+            --tokenizer $MODEL_PATH \
             --dataset-name $dataset_name \
             --random-input-len $input_len \
             --random-output-len $output_len \
@@ -186,9 +203,9 @@ main() {
     export VLLM_HOST_IP=$(hostname -I | awk '{print $1}')
     
     # 设置全局输出相关变量
-    results_folder="./results/$svc_model_name"
+    results_folder="./results/$SERVER_NAME"
     mkdir -p "$results_folder"
-    tag="$svc_model_name"-"$(date +%Y%m%d-%H%M%S)"
+    tag="$SERVER_NAME"-"$(date +%Y%m%d-%H%M%S)"
     echo "request_rate","max_concurrency","num_prompts","input_start","output_start","duration","request_throughput","output_token_throughput","total_token_throughput","mean_ttft","p90_ttft","p95_ttft","p99_ttft","mean_tpot","p90_tpot","p95_tpot","p99_tpot","mean_itl","p90_itl","p95_itl","p99_itl" > $results_folder/$tag-summary.csv
 
     # 循环读取 params 数组并进行测试
