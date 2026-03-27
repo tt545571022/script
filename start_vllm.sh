@@ -1,12 +1,13 @@
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-5,6}"  # 若环境变量已存在则保留原值，否则使用默认值
 
-MODEL_PATH=/home/tjl/pard/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
+# ==============================================================================
+# 默认参数配置 (Default Configuration)，通过输入参数传递时，会覆盖这些默认值
+# ==============================================================================
+
+MODEL_PATH=/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
 SERVER_NAME=hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
 
-# MODEL_PATH="/nfs_data/weight/Qwen3-8B"
-# SERVER_NAME="Qwen3-8B"
-# SPEC_MODEL_PATH="/nfs_data/weight/amd_PARD-Qwen3-0.6B"
-PORT=5678
+PORT=56781
 
 # ==============================================================================
 # 命令行参数解析 (Parse Command Line Arguments)
@@ -37,8 +38,8 @@ vllm serve $MODEL_PATH \
     --seed 42 \
     -tp 2 \
     --gpu_memory_utilization 0.9 \
-    --speculative_config '{"method":"mtp", "num_speculative_tokens":1}'
-    --kv-cache-dtype "fp8" \
+    # --speculative_config '{"method":"mtp", "num_speculative_tokens":1}'
+    # --kv-cache-dtype "fp8" \
 
 
     # --kv_offloading_backend native --kv_offloading_size 20 \

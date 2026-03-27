@@ -1,16 +1,14 @@
 set -e
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=6,7
-# MODEL_PATH=${1:-"/home/weight/Qwen2.5-7B-Instruct"}
-# SERVER_NAME=${2:-"Qwen2.5-7B-Instruct"}
+export CUDA_VISIBLE_DEVICES=4,5
 MODEL_PATH=${1:-"/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4"}
 SERVER_NAME=${2:-"hf_Sehyo-Qwen3.5-122B-A10B-NVFP4"}
 PORT=${3:-5678}
-SUFFIX=${4:-"fp8-fp"}
+TAG=${4:-"src"}
 
-LOG_PATH="./logs"
-SERVER_LOG="$LOG_PATH/server_${SUFFIX}.log"
-CLIENT_LOG="$LOG_PATH/client_${SUFFIX}.log"
+RESULT_PATH="./results/${SERVER_NAME}_${TAG}_$(date +%Y%m%d_%H%M%S)"
+SERVER_LOG="$RESULT_PATH/server_${TAG}.log"
+CLIENT_LOG="$RESULT_PATH/client_${TAG}.log"
 
 
 
@@ -19,16 +17,18 @@ CLIENT_LOG="$LOG_PATH/client_${SUFFIX}.log"
 wait_for_health() {
     local retries="${1:-30}"
     local interval="${2:-3}"
-    local _i
+    local _i http_code
     for _i in $(seq 1 "$retries"); do
         echo -ne "\r尝试 $_i/${retries} - 检查 服务器健康状态..."
-        if curl -f -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
-            echo "✓ 服务器健康检查通过"
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+                    "http://localhost:${PORT}/health" 2>/dev/null) || http_code="000"
+        if [ "$http_code" = "200" ]; then
+            echo "✓ 服务器健康检查通过, http_code: ${http_code}"
             return 0
         fi
         sleep "$interval"
     done
-    echo "✗ 服务器健康检查失败（重试 ${retries} 次仍无响应）"
+    echo "✗ 服务器健康检查失败（重试 ${retries} 次仍无响应，最后状态码: ${http_code}）"
     exit 1
 }
 
@@ -68,7 +68,7 @@ stop_server() {
 
 check_and_clear_gpu() {
     echo "检查 GPU 状态并清理..."
-    local mem_threshold=4000
+    local mem_threshold=20000
     local gpu_args=()
     [ -n "$CUDA_VISIBLE_DEVICES" ] && gpu_args=("-i" "$CUDA_VISIBLE_DEVICES")
 
@@ -115,7 +115,7 @@ check_and_clear_gpu() {
 }
 
 # ── 初始化日志文件 ──────────────────────────────────────
-mkdir -p "$LOG_PATH"
+mkdir -p "$RESULT_PATH"
 echo server log: "$SERVER_LOG"
 echo client log: "$CLIENT_LOG"
 echo "" > "$SERVER_LOG"
@@ -126,6 +126,6 @@ check_and_clear_gpu
 bash start_vllm.sh -m "$MODEL_PATH" -s "$SERVER_NAME" -p "$PORT" > "$SERVER_LOG" 2>&1 &
 wait_for_startup "Stage-1" "$SERVER_LOG"
 
-bash run_bench_hci.sh -m "$MODEL_PATH" -s "$SERVER_NAME" -p "$PORT" > "$CLIENT_LOG" 2>&1
+bash run_bench_hci.sh -m "$MODEL_PATH" -s "$SERVER_NAME" -p "$PORT" -o "$RESULT_PATH" > "$CLIENT_LOG" 2>&1
 
 stop_server

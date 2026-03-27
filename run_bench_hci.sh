@@ -1,14 +1,13 @@
 #!/bin/bash
 
 # ==============================================================================
-# 默认参数配置 (Default Configuration)
+# 默认参数配置 (Default Configuration)，通过输入参数传递时，会覆盖这些默认值
 # ==============================================================================
-MODEL_PATH=/home/tjl/pard/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
+MODEL_PATH=/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
 SERVER_NAME=hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
-port=5678
-
-# MODEL_PATH="/nfs_data/weight/Qwen3-8B"
-# SERVER_NAME="Qwen3-8B"
+PORT=56781
+TAG="src"
+OUTPUT_PATH="./results/${SERVER_NAME}_${TAG}_$(date +%Y%m%d_%H%M%S)"
 
 random_range_ratio=0
 random_range_ratio_percent=0
@@ -95,14 +94,18 @@ params=(
 # ==============================================================================
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -m|--model_path) MODEL_PATH="$2"; shift 2 ;;
+        -m|--model-path) MODEL_PATH="$2"; shift 2 ;;
         -s|--server-name) SERVER_NAME="$2"; shift 2 ;;
-        -p|--port) port="$2"; shift 2 ;;
+        -p|--port) PORT="$2"; shift 2 ;;
+        -o|--output) OUTPUT_PATH="$2"; shift 2 ;;
+        -t|--tag) TAG="$2"; shift 2 ;;
         -*) echo "Unknown parameter passed: $1"
-            echo "Usage: $0 [-m|--model_path <path>] [-s|--server-name <name>] [-p|--port <port>]"
-            echo "  -m, --model_path    模型权重路径 (默认: $MODEL_PATH)"
+            echo "Usage: $0 [-m|--model-path <path>] [-s|--server-name <name>] [-p|--port <port>] [-o|--output <path>] [-t|--tag <tag>]"
+            echo "  -m, --model-path    模型权重路径 (默认: $MODEL_PATH)"
             echo "  -s, --server-name   vllm served-model-name (默认: $SERVER_NAME)"
-            echo "  -p, --port          服务端口号 (默认: $port)"
+            echo "  -p, --port          服务端口号 (默认: $PORT)"
+            echo "  -o, --output        结果保存路径 (默认: $OUTPUT_PATH)"
+            echo "  -t, --tag           标签 (默认: $TAG)"
             exit 1 ;;
         *) shift ;;  # 跳过位置参数
     esac
@@ -111,7 +114,6 @@ done
 # ==============================================================================
 # Helper Functions and Core Logic
 # ==============================================================================
-
 # 定义一个函数来安全地提取值
 extract_value() {
     local result="$1"
@@ -142,8 +144,11 @@ run_benchmark() {
     local output_end=$((output_len + output_len * random_range_ratio_percent / 100))
 
     local dataset_name="random"
-    # echo "测试参数：req_rate: $request_rate, max_concurrency: $max_concurrency, num_prompts: $num_prompts, input: $input_start-$input_end，output: $output_start-$output_end"
-    
+    echo "测试参数：req_rate: $request_rate, max_concurrency: $max_concurrency, num_prompts: $num_prompts, input: $input_start-$input_end，output: $output_start-$output_end"
+
+    result_json="prompts-$num_prompts-in-$input_len-out-$output_len-concur-$max_concurrency-$(date +%Y%m%d_%H%M%S).json"
+    result_log="$OUTPUT_PATH/prompts-$num_prompts-in-$input_len-out-$output_len-concur-$max_concurrency-$(date +%Y%m%d_%H%M%S).log"  
+
     local benchmark_result=$(
             vllm bench serve \
             --backend vllm \
@@ -156,11 +161,11 @@ run_benchmark() {
             --random-range-ratio $random_range_ratio \
             --request-rate $request_rate \
             --num-prompts $num_prompts \
-            --base-url http://127.0.0.1:${port} \
+            --base-url http://127.0.0.1:${PORT} \
             --endpoint /v1/completions \
             --save-result \
-            --result-dir "$results_folder" \
-            --result-filename "$tag-concurrency-$max_concurrency.json" \
+            --result-dir "$OUTPUT_PATH" \
+            --result-filename ${result_json} \
             --max-concurrency "$max_concurrency" \
             --trust-remote-code \
             --seed $(date +%s) \
@@ -171,7 +176,7 @@ run_benchmark() {
             --metric-percentiles "25,50,75,90,95,99"
     )
     
-    echo "$benchmark_result"  | tee "$results_folder/$tag-concurrency-$max_concurrency.log"
+    echo "$benchmark_result"  | tee ${result_log}
     
     # 提取所需的值
     local duration=$(extract_value "$benchmark_result" "Benchmark duration (s):")
@@ -193,7 +198,7 @@ run_benchmark() {
 
     # 组合成所需的字符串，使用空格作为分隔符
     local result=$(printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" "$request_rate" "$max_concurrency" "$num_prompts" "$input_start" "$output_start" "$duration" "$request_throughput" "$output_token_throughput" "$total_token_throughput" "$mean_ttft" "$p90_ttft" "$p95_ttft" "$p99_ttft" "$mean_tpot" "$p90_tpot" "$p95_tpot" "$p99_tpot" "$mean_itl" "$p90_itl" "$p95_itl" "$p99_itl")
-    echo "$result" >> $results_folder/$tag-summary.csv
+    echo "$result" >> $OUTPUT_PATH/$tag-summary.csv
 
     sleep 1
 }
@@ -203,17 +208,16 @@ main() {
     export VLLM_HOST_IP=$(hostname -I | awk '{print $1}')
     
     # 设置全局输出相关变量
-    results_folder="./results/$SERVER_NAME"
-    mkdir -p "$results_folder"
+    mkdir -p "$OUTPUT_PATH"
     tag="$SERVER_NAME"-"$(date +%Y%m%d-%H%M%S)"
-    echo "request_rate","max_concurrency","num_prompts","input_start","output_start","duration","request_throughput","output_token_throughput","total_token_throughput","mean_ttft","p90_ttft","p95_ttft","p99_ttft","mean_tpot","p90_tpot","p95_tpot","p99_tpot","mean_itl","p90_itl","p95_itl","p99_itl" > $results_folder/$tag-summary.csv
+    echo "request_rate","max_concurrency","num_prompts","input_start","output_start","duration","request_throughput","output_token_throughput","total_token_throughput","mean_ttft","p90_ttft","p95_ttft","p99_ttft","mean_tpot","p90_tpot","p95_tpot","p99_tpot","mean_itl","p90_itl","p95_itl","p99_itl" > $OUTPUT_PATH/$tag-summary.csv
 
     # 循环读取 params 数组并进行测试
     for param_str in "${params[@]}"; do
         # 将字符串按空格拆分为对应参数
         read -r req_rate max_conc num_p in_len out_len <<< "$param_str"
         
-        # echo "执行参数: request_rate=$req_rate max_concurrency=$max_conc num_prompts=$num_p input_len=$in_len output_len=$out_len"
+        echo "执行参数: request_rate=$req_rate max_concurrency=$max_conc num_prompts=$num_p input_len=$in_len output_len=$out_len"
         run_benchmark "$req_rate" "$max_conc" "$num_p" "$in_len" "$out_len"
     done
 }
