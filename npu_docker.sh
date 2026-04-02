@@ -1,9 +1,10 @@
 #! /bin/bash
 user=tjl
-name=lmcahce1501
+name=vllm-180
 # image=vllm-ascend-ucm:v0.9.2rc1
 # image=m.daocloud.io/quay.io/ascend/vllm-ascend:glm5
- image=quay.io/ascend/vllm-ascend:v0.15.0rc1
+# image=quay.io/ascend/vllm-ascend:v0.17.0rc1
+image=quay.io/ascend/vllm-ascend:releases-v0.18.0
 # image=swr.cn-south-1.myhuaweicloud.com/ascendhub/mindie:2.2.RC1-800I-A2-py311-openeuler24.03-lts
 
 docker run -itd -u root \
@@ -13,6 +14,7 @@ docker run -itd -u root \
 	-e LANG=en_US.UTF-8 \
 	-e LANGUAGE=en_US:en \
 --ipc=host \
+--net=host \
 --device=/dev/davinci0 \
 --device=/dev/davinci1 \
 --device=/dev/davinci2 \

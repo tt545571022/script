@@ -3,11 +3,12 @@
 # ==============================================================================
 # 默认参数配置 (Default Configuration)，通过输入参数传递时，会覆盖这些默认值
 # ==============================================================================
-MODEL_PATH=/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
-SERVER_NAME=hf_Sehyo-Qwen3.5-122B-A10B-NVFP4
-PORT=56781
+MODEL_PATH=/data2/weights/Qwen3-8B/
+SERVER_NAME=Qwen3-8B
+PORT=5678
 TAG="src"
 OUTPUT_PATH="./results/${SERVER_NAME}_${TAG}_$(date +%Y%m%d_%H%M%S)"
+
 
 random_range_ratio=0
 random_range_ratio_percent=0
@@ -17,76 +18,39 @@ random_range_ratio_percent=0
 # 格式: "request_rate max_concurrency num_prompts input_len output_len"
 # ==============================================================================
 params=(
-    "8 8 8 128 128"         # just for test
-    "1 1 1 32000 16"         # just for test
-    "1 1 1 32000 16"         # just for test
-    "2 2 2 32000 16"         # just for test
-    "2 2 2 32000 16"         # just for test
-    "16 16 16 32000 16"         # just for test
-    "16 16 16 32000 16"         # just for test
-    # "16 16 16 131072 1024"         # just for test
-    # "16 16 16 131072 1024"         # just for test
-    # "128 128 128 32000 16"         # just for test
-    # "128 128 128 32000 16"         # just for test
-    # "32 32 64 128 128"
-    # "64 64 128 128 128"
-    # "128 128 256 128 128"
-    # "256 256 512 128 128"
-    # "512 512 1024 128 128"
-    # "8 32 64 128 1024"
-    # "16 64 128 128 1024"
-    # "32 128 256 128 1024"
-    # "64 256 512 128 1024"
-    # "4 32 64 128 2048"
-    # "8 64 128 128 2048"
-    # "16 128 256 128 2048"
-    # "32 256 512 128 2048"
-    # "32 32 64 256 256"
-    # "64 64 128 256 256"
-    # "128 128 256 256 256"
-    # "256 256 512 256 256"
-    # "512 512 1024 256 256"
-    # "16 32 64 512 512"
-    # "128 64 128 512 512"
-    # "256 128 256 512 512"
-    # "512 256 512 512 512"
-    # "256 512 1024 512 512"
-    # "32 32 64 1024 128"
-    # "64 64 128 1024 128"
-    # "128 128 256 1024 128"
-    # "256 256 512 1024 128"
-    # "512 512 1024 1024 128"
-    # "1 8 16 2048 2048"
-    # "2 16 32 2048 2048"
-    # "4 32 64 2048 2048"
-    # "8 64 128 2048 2048"
-    # "16 128 256 2048 2048"
-    # "32 256 512 2048 2048"
-    # "2 8 16 4096 1024"
-    # "4 16 32 4096 1024"
-    # "8 32 64 4096 1024"
-    # "16 64 128 4096 1024"
-    # "32 128 256 4096 1024"
-    # "64 256 512 4096 1024"
-    # "1 8 16 4096 2048"
-    # "2 16 32 4096 2048"
-    # "4 32 64 4096 2048"
-    # "8 64 128 4096 2048"
-    # "16 128 256 4096 2048"
-    # "1 8 16 4096 4096"
-    # "2 16 32 4096 4096"
-    # "4 32 64 4096 4096"
-    # "8 64 128 4096 4096"
-    # "1 8 16 8192 2048"
-    # "2 16 32 8192 2048"
-    # "4 32 64 8192 2048"
-    # "8 64 128 8192 2048"
-    # "1 8 16 8192 8192"
-    # "2 16 32 8192 8192"
-    # "4 32 64 8192 8192"
-    # "8 64 128 8192 8192"
-    # "1 8 16 16384 6144"
-    # "2 16 32 16384 6144"
+    # "inf 8 8 128 128"         # just for test
+
+    "inf 1 5 16384 8192"
+    "inf 1 5 32768 512"
+    "inf 1 5 131072 4096"
+
+    "inf 4 20 16384 8192"
+    "inf 4 20 32768 512"
+    "inf 4 20 131072 4096"
+
+    "inf 8 40 16384 8192"
+    "inf 8 40 32768 512"
+    "inf 8 40 131072 4096"
+
+    "inf 16 80 16384 8192"
+    "inf 16 80 32768 512"
+    "inf 16 80 131072 4096"
+
+    "inf 32 160 16384 8192"
+    "inf 32 160 32768 512"
+    "inf 32 160 131072 4096"
+
+    "inf 64 320 16384 8192"
+    "inf 64 320 32768 512"
+    "inf 64 320 131072 4096"
+
+    "inf 128 640 16384 8192"
+    "inf 128 640 32768 512"
+    "inf 128 640 131072 4096"
+
+    "inf 256 1280 16384 8192"
+    "inf 256 1280 32768 512"
+    "inf 256 1280 131072 4096"
 )
 
 # ==============================================================================
@@ -173,13 +137,14 @@ run_benchmark() {
             --ignore-eos \
             --ready-check-timeout-sec 0 \
             --percentile-metrics ttft,tpot,itl,e2el \
-            --metric-percentiles "25,50,75,90,95,99"
+            --metric-percentiles "25,50,75,90,95,99" \
     )
     
     echo "$benchmark_result"  | tee ${result_log}
     
     # 提取所需的值
     local duration=$(extract_value "$benchmark_result" "Benchmark duration (s):")
+    local failed_requests=$(extract_value "$benchmark_result" "Failed requests:")
     local request_throughput=$(extract_value "$benchmark_result" "Request throughput (req/s):")
     local output_token_throughput=$(extract_value "$benchmark_result" "Output token throughput (tok/s):")
     local total_token_throughput=$(extract_value "$benchmark_result" "Total token throughput (tok/s):")
@@ -197,7 +162,7 @@ run_benchmark() {
     local p99_itl=$(extract_value "$benchmark_result" "P99 ITL (ms):")
 
     # 组合成所需的字符串，使用空格作为分隔符
-    local result=$(printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" "$request_rate" "$max_concurrency" "$num_prompts" "$input_start" "$output_start" "$duration" "$request_throughput" "$output_token_throughput" "$total_token_throughput" "$mean_ttft" "$p90_ttft" "$p95_ttft" "$p99_ttft" "$mean_tpot" "$p90_tpot" "$p95_tpot" "$p99_tpot" "$mean_itl" "$p90_itl" "$p95_itl" "$p99_itl")
+    local result=$(printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" "$request_rate" "$max_concurrency" "$num_prompts" "$input_start" "$output_start" "$duration" "$failed_requests" "$request_throughput" "$output_token_throughput" "$total_token_throughput" "$mean_ttft" "$p90_ttft" "$p95_ttft" "$p99_ttft" "$mean_tpot" "$p90_tpot" "$p95_tpot" "$p99_tpot" "$mean_itl" "$p90_itl" "$p95_itl" "$p99_itl")
     echo "$result" >> $OUTPUT_PATH/$tag-summary.csv
 
     sleep 1
@@ -210,14 +175,13 @@ main() {
     # 设置全局输出相关变量
     mkdir -p "$OUTPUT_PATH"
     tag="$SERVER_NAME"-"$(date +%Y%m%d-%H%M%S)"
-    echo "request_rate","max_concurrency","num_prompts","input_start","output_start","duration","request_throughput","output_token_throughput","total_token_throughput","mean_ttft","p90_ttft","p95_ttft","p99_ttft","mean_tpot","p90_tpot","p95_tpot","p99_tpot","mean_itl","p90_itl","p95_itl","p99_itl" > $OUTPUT_PATH/$tag-summary.csv
+    echo "request_rate","max_concurrency","num_prompts","input_start","output_start","duration","failed_requests","request_throughput","output_token_throughput","total_token_throughput","mean_ttft","p90_ttft","p95_ttft","p99_ttft","mean_tpot","p90_tpot","p95_tpot","p99_tpot","mean_itl","p90_itl","p95_itl","p99_itl" > $OUTPUT_PATH/$tag-summary.csv
 
     # 循环读取 params 数组并进行测试
     for param_str in "${params[@]}"; do
         # 将字符串按空格拆分为对应参数
         read -r req_rate max_conc num_p in_len out_len <<< "$param_str"
         
-        echo "执行参数: request_rate=$req_rate max_concurrency=$max_conc num_prompts=$num_p input_len=$in_len output_len=$out_len"
         run_benchmark "$req_rate" "$max_conc" "$num_p" "$in_len" "$out_len"
     done
 }
