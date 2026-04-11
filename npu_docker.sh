@@ -3,8 +3,8 @@ user=tjl
 name=vllm-180
 # image=vllm-ascend-ucm:v0.9.2rc1
 # image=m.daocloud.io/quay.io/ascend/vllm-ascend:glm5
-# image=quay.io/ascend/vllm-ascend:v0.17.0rc1
-image=quay.io/ascend/vllm-ascend:releases-v0.18.0
+image=quay.io/ascend/vllm-ascend:nightly-releases-v0.18.0
+# image=quay.io/ascend/vllm-ascend:releases-v0.18.0
 # image=swr.cn-south-1.myhuaweicloud.com/ascendhub/mindie:2.2.RC1-800I-A2-py311-openeuler24.03-lts
 
 docker run -itd -u root \

@@ -8,6 +8,7 @@ SERVER_NAME=Qwen3-8B
 PORT=5678
 TAG="src"
 OUTPUT_PATH="./results/${SERVER_NAME}_${TAG}_$(date +%Y%m%d_%H%M%S)"
+BENCH_ARGS=""
 
 
 random_range_ratio=0
@@ -18,40 +19,63 @@ random_range_ratio_percent=0
 # 格式: "request_rate max_concurrency num_prompts input_len output_len"
 # ==============================================================================
 params=(
-    # "inf 8 8 128 128"         # just for test
+    "inf 8 8 4096 128"         # just for test
 
-    "inf 1 5 16384 8192"
-    "inf 1 5 32768 512"
-    "inf 1 5 131072 4096"
+    "inf 1 1 1024 2048"
+    "inf 1 1 10000 1024"
 
-    "inf 4 20 16384 8192"
-    "inf 4 20 32768 512"
-    "inf 4 20 131072 4096"
+    "inf 8 8 1024 2048"
+    "inf 8 8 10000 1024"
 
-    "inf 8 40 16384 8192"
-    "inf 8 40 32768 512"
-    "inf 8 40 131072 4096"
+    # "inf 1 5 16384 8192"
+    # "inf 1 5 32768 512"
+    # "inf 1 5 131072 4096"
 
-    "inf 16 80 16384 8192"
-    "inf 16 80 32768 512"
-    "inf 16 80 131072 4096"
+    # "inf 4 20 16384 8192"
+    # "inf 4 20 32768 512"
+    # "inf 4 20 131072 4096"
 
-    "inf 32 160 16384 8192"
-    "inf 32 160 32768 512"
-    "inf 32 160 131072 4096"
+    # "inf 8 40 16384 8192"
+    # "inf 8 40 32768 512"
+    # "inf 8 40 131072 4096"
 
-    "inf 64 320 16384 8192"
-    "inf 64 320 32768 512"
-    "inf 64 320 131072 4096"
+    # "inf 16 80 16384 8192"
+    # "inf 16 80 32768 512"
+    # "inf 16 80 131072 4096"
 
-    "inf 128 640 16384 8192"
-    "inf 128 640 32768 512"
-    "inf 128 640 131072 4096"
+    # "inf 32 160 16384 8192"
+    # "inf 32 160 32768 512"
+    # "inf 32 160 131072 4096"
 
-    "inf 256 1280 16384 8192"
-    "inf 256 1280 32768 512"
-    "inf 256 1280 131072 4096"
+    # "inf 64 320 16384 8192"
+    # "inf 64 320 32768 512"
+    # "inf 64 320 131072 4096"
+
+    # "inf 128 640 16384 8192"
+    # "inf 128 640 32768 512"
+    # "inf 128 640 131072 4096"
+
+    # "inf 256 1280 16384 8192"
+    # "inf 256 1280 32768 512"
+    # "inf 256 1280 131072 4096"
 )
+
+usage() {
+    echo "Usage: $0 [options]"
+    echo "  -m, --model-path <path>    模型权重路径 (默认: $MODEL_PATH)"
+    echo "  -s, --server-name <name>   vllm served-model-name (默认: $SERVER_NAME)"
+    echo "  -p, --port <port>          服务端口号 (默认: $PORT)"
+    echo "  -o, --output <path>        结果保存路径 (默认: $OUTPUT_PATH)"
+    echo "  -t, --tag <tag>            标签 (默认: $TAG)"
+    echo "      --bench-args <args>    追加到 vllm bench serve 末尾的额外参数"
+}
+
+parse_extra_args() {
+    BENCH_EXTRA_ARGS=()
+    if [[ -n "$1" ]]; then
+        eval "BENCH_EXTRA_ARGS=($1)"
+    fi
+}
 
 # ==============================================================================
 # 命令行参数解析 (Parse Command Line Arguments)
@@ -63,17 +87,19 @@ while [[ "$#" -gt 0 ]]; do
         -p|--port) PORT="$2"; shift 2 ;;
         -o|--output) OUTPUT_PATH="$2"; shift 2 ;;
         -t|--tag) TAG="$2"; shift 2 ;;
-        -*) echo "Unknown parameter passed: $1"
-            echo "Usage: $0 [-m|--model-path <path>] [-s|--server-name <name>] [-p|--port <port>] [-o|--output <path>] [-t|--tag <tag>]"
-            echo "  -m, --model-path    模型权重路径 (默认: $MODEL_PATH)"
-            echo "  -s, --server-name   vllm served-model-name (默认: $SERVER_NAME)"
-            echo "  -p, --port          服务端口号 (默认: $PORT)"
-            echo "  -o, --output        结果保存路径 (默认: $OUTPUT_PATH)"
-            echo "  -t, --tag           标签 (默认: $TAG)"
+        --bench-args) BENCH_ARGS="$2"; shift 2 ;;
+        -h|--help)
+            usage
+            exit 0 ;;
+        -*)
+            echo "Unknown parameter passed: $1"
+            usage
             exit 1 ;;
         *) shift ;;  # 跳过位置参数
     esac
 done
+
+parse_extra_args "$BENCH_ARGS"
 
 # ==============================================================================
 # Helper Functions and Core Logic
@@ -113,34 +139,41 @@ run_benchmark() {
     result_json="prompts-$num_prompts-in-$input_len-out-$output_len-concur-$max_concurrency-$(date +%Y%m%d_%H%M%S).json"
     result_log="$OUTPUT_PATH/prompts-$num_prompts-in-$input_len-out-$output_len-concur-$max_concurrency-$(date +%Y%m%d_%H%M%S).log"  
 
-    local benchmark_result=$(
-            vllm bench serve \
-            --backend vllm \
-            --model $SERVER_NAME \
-            --tokenizer $MODEL_PATH \
-            --dataset-name $dataset_name \
-            --random-input-len $input_len \
-            --random-output-len $output_len \
-            --random-prefix-len $prefix_len \
-            --random-range-ratio $random_range_ratio \
-            --request-rate $request_rate \
-            --num-prompts $num_prompts \
-            --base-url http://127.0.0.1:${PORT} \
-            --endpoint /v1/completions \
-            --save-result \
-            --result-dir "$OUTPUT_PATH" \
-            --result-filename ${result_json} \
-            --max-concurrency "$max_concurrency" \
-            --trust-remote-code \
-            --seed $(date +%s) \
-            --burstiness 100 \
-            --ignore-eos \
-            --ready-check-timeout-sec 0 \
-            --percentile-metrics ttft,tpot,itl,e2el \
-            --metric-percentiles "25,50,75,90,95,99" \
+    local bench_cmd=(
+        vllm bench serve
+        --backend vllm
+        --model "$SERVER_NAME"
+        --tokenizer "$MODEL_PATH"
+        --dataset-name "$dataset_name"
+        --random-input-len "$input_len"
+        --random-output-len "$output_len"
+        --random-prefix-len "$prefix_len"
+        --random-range-ratio "$random_range_ratio"
+        --request-rate "$request_rate"
+        --num-prompts "$num_prompts"
+        --base-url http://127.0.0.1:${PORT}
+        --endpoint /v1/completions
+        --save-result
+        --result-dir "$OUTPUT_PATH"
+        --result-filename "$result_json"
+        --max-concurrency "$max_concurrency"
+        --trust-remote-code
+        --seed "$(date +%s)"
+        --burstiness 100
+        --ignore-eos
+        --ready-check-timeout-sec 0
+        --percentile-metrics ttft,tpot,itl,e2el
+        --metric-percentiles "25,50,75,90,95,99"
     )
+
+    if [[ ${#BENCH_EXTRA_ARGS[@]} -gt 0 ]]; then
+        bench_cmd+=("${BENCH_EXTRA_ARGS[@]}")
+    fi
+
+    local benchmark_result
+    benchmark_result=$("${bench_cmd[@]}")
     
-    echo "$benchmark_result"  | tee ${result_log}
+    echo "$benchmark_result"  | tee "$result_log"
     
     # 提取所需的值
     local duration=$(extract_value "$benchmark_result" "Benchmark duration (s):")

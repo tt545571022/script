@@ -1,15 +1,58 @@
+#!/bin/bash
+
 set -e
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export VISIBLE_DEVICES=${VISIBLE_DEVICES:-14,15}
+export VISIBLE_DEVICES=${VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
 
 USAGE_THRESHOLD=${USAGE_THRESHOLD:-20}
 
-MODEL_PATH=${1:-"/data2/weights/Qwen_Qwen3-VL-8B-Instruct/"}
-SERVER_NAME=${2:-"Qwen_Qwen3-VL-8B-Instruct"}
-PORT=${3:-5678}
-TAG=${4:-"src"}
+MODEL_PATH="/root/modelscope_vllm-ascend_DeepSeek-V3.2-W8A8"
+SERVER_NAME="modelscope_vllm-ascend_DeepSeek-V3.2-W8A8"
+PORT=5678
+TAG="indexcache"
+OUTPUT_PATH=""
+SERVER_ARGS=""
+BENCH_ARGS=""
 
-RESULT_PATH="./results/${SERVER_NAME}_${TAG}_$(date +%Y%m%d_%H%M%S)"
+usage() {
+    echo "Usage: $0 [options]"
+    echo "  -m, --model-path <path>    模型权重路径 (默认: $MODEL_PATH)"
+    echo "  -s, --server-name <name>   vllm served-model-name (默认: $SERVER_NAME)"
+    echo "  -p, --port <port>          服务端口号 (默认: $PORT)"
+    echo "  -t, --tag <tag>            本次实验标签 (默认: $TAG)"
+    echo "  -o, --output <path>        结果保存路径 (默认: ./results/<SERVER_NAME>_<timestamp>_<TAG>)"
+    echo "      --server-args <args>   追加到 vllm serve 末尾的额外参数"
+    echo "      --bench-args <args>    追加到 vllm bench serve 末尾的额外参数"
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -m|--model-path) MODEL_PATH="$2"; shift 2 ;;
+        -s|--server-name) SERVER_NAME="$2"; shift 2 ;;
+        -p|--port) PORT="$2"; shift 2 ;;
+        -t|--tag) TAG="$2"; shift 2 ;;
+        -o|--output) OUTPUT_PATH="$2"; shift 2 ;;
+        --server-args) SERVER_ARGS="$2"; shift 2 ;;
+        --bench-args) BENCH_ARGS="$2"; shift 2 ;;
+        -h|--help)
+            usage
+            exit 0 ;;
+        -*)
+            echo "Unknown parameter passed: $1"
+            usage
+            exit 1 ;;
+        *)
+            echo "Unexpected positional argument: $1"
+            usage
+            exit 1 ;;
+    esac
+done
+
+if [[ -z "$OUTPUT_PATH" ]]; then
+    OUTPUT_PATH="./results/${SERVER_NAME}_$(date +%Y%m%d_%H%M%S)_${TAG}"
+fi
+
+RESULT_PATH="$OUTPUT_PATH"
 SERVER_LOG="$RESULT_PATH/server_${TAG}.log"
 CLIENT_LOG="$RESULT_PATH/client_${TAG}.log"
 
@@ -207,9 +250,21 @@ echo "" > "$SERVER_LOG"
 echo "" > "$CLIENT_LOG"
 check_and_clear_device
 
-bash start_vllm.sh -m "$MODEL_PATH" -s "$SERVER_NAME" -p "$PORT" > "$SERVER_LOG" 2>&1 &
+bash start_vllm.sh \
+    --model-path "$MODEL_PATH" \
+    --server-name "$SERVER_NAME" \
+    --port "$PORT" \
+    --server-args "$SERVER_ARGS" \
+    > "$SERVER_LOG" 2>&1 &
 wait_for_startup "Stage-1" "$SERVER_LOG"
 
-bash run_bench_hci.sh -m "$MODEL_PATH" -s "$SERVER_NAME" -p "$PORT" -o "$RESULT_PATH" -t "$TAG" > "$CLIENT_LOG" 2>&1
+bash run_bench_hci.sh \
+    --model-path "$MODEL_PATH" \
+    --server-name "$SERVER_NAME" \
+    --port "$PORT" \
+    --output "$RESULT_PATH" \
+    --tag "$TAG" \
+    --bench-args "$BENCH_ARGS" \
+    > "$CLIENT_LOG" 2>&1
 
 stop_server

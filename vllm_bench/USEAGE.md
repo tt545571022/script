@@ -25,15 +25,18 @@
 ### 用法
 
 ```bash
-bash run_e2e.sh [MODEL_PATH] [SERVER_NAME] [PORT] [TAG]
+bash run_e2e.sh [选项]
 ```
 
-| 位置参数 | 默认值 | 说明 |
+| 参数 | 默认值 | 说明 |
 |----------|--------|------|
-| `MODEL_PATH` | `/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4` | 模型权重路径 |
-| `SERVER_NAME` | `hf_Sehyo-Qwen3.5-122B-A10B-NVFP4` | vLLM served-model-name |
-| `PORT` | `5678` | 服务端口号 |
-| `TAG` | `src` | 本次实验标签，用于区分结果目录 |
+| `--model-path` | 脚本内默认模型路径 | 模型权重路径 |
+| `--server-name` | 脚本内默认服务名 | vLLM served-model-name |
+| `--port` | `5678` | 服务端口号 |
+| `--tag` | `src` 或脚本内默认值 | 本次实验标签，用于区分结果目录 |
+| `--output` | `./results/<SERVER_NAME>_<timestamp>_<TAG>` | 结果保存目录 |
+| `--server-args` | 脚本内默认值 | 透传给 `start_vllm.sh`，并追加到 `vllm serve` 末尾 |
+| `--bench-args` | 空 | 透传给 `run_bench_hci.sh`，并追加到 `vllm bench serve` 末尾 |
 
 **示例：**
 ```bash
@@ -41,7 +44,12 @@ bash run_e2e.sh [MODEL_PATH] [SERVER_NAME] [PORT] [TAG]
 bash run_e2e.sh
 
 # 指定模型和标签
-bash run_e2e.sh /nfs_data/weight/MyModel MyModel 5678 fp8
+bash run_e2e.sh --model-path /nfs_data/weight/MyModel --server-name MyModel --port 5678 --tag fp8
+
+# 透传服务端和基准测试附加参数
+bash run_e2e.sh \
+    --server-args "--hf-overrides '{\"index_topk_freq\": 4}' --max-num-batched-tokens 32768" \
+    --bench-args "--request-rate 2"
 ```
 
 ### 结果输出
@@ -104,9 +112,10 @@ bash start_vllm.sh [选项]
 
 | 参数 | 简写 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--model_path` | `-m` | `/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4` | 模型权重路径 |
+| `--model-path` | `-m` | `/nfs_data/weight/hf_Sehyo-Qwen3.5-122B-A10B-NVFP4` | 模型权重路径 |
 | `--server-name` | `-s` | `hf_Sehyo-Qwen3.5-122B-A10B-NVFP4` | served-model-name（客户端调用时使用） |
 | `--port` | `-p` | `56781` | 监听端口 |
+| `--server-args` |  | 空或脚本内默认值 | 追加到 `vllm serve` 末尾的参数 |
 
 **示例：**
 ```bash
@@ -115,6 +124,10 @@ bash start_vllm.sh
 
 # 指定模型路径和端口
 bash start_vllm.sh -m /nfs_data/weight/MyModel -s MyModel -p 8000
+
+# 透传额外 serve 参数
+bash start_vllm.sh -m /nfs_data/weight/MyModel -s MyModel -p 8000 \
+    --server-args "--hf-overrides '{\"index_topk_freq\": 4}'"
 ```
 
 ### 关键配置
@@ -149,6 +162,7 @@ bash run_bench_hci.sh [选项]
 | `--port` | `-p` | `56781` | vLLM 服务端口 |
 | `--output` | `-o` | `./results/<name>_<tag>_<时间戳>` | 结果保存目录 |
 | `--tag` | `-t` | `src` | 实验标签 |
+| `--bench-args` |  | 空 | 追加到 `vllm bench serve` 末尾的参数 |
 
 **示例：**
 ```bash
@@ -161,7 +175,8 @@ bash run_bench_hci.sh \
     -s MyModel \
     -p 8000 \
     -o ./results/exp1 \
-    -t fp8
+    -t fp8 \
+    --bench-args "--request-rate 2"
 ```
 
 ### 测试用例配置
