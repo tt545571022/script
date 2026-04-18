@@ -81,6 +81,11 @@ wait_for_startup() {
     local waited=0
     echo "等待 ${stage_label} 服务器启动..."
     while [ $waited -lt $max_wait ]; do
+        if tail -n +"$((log_offset + 1))" "$log_file" 2>/dev/null | grep -q "Traceback (most recent call last)"; then
+            echo "✗ ${stage_label} 服务器启动失败，日志中检测到 Python Traceback"
+            tail -30 "$log_file"
+            exit 1
+        fi
         if tail -n +"$((log_offset + 1))" "$log_file" 2>/dev/null | grep -q "Application startup complete."; then
             echo "✓ ${stage_label} 服务器启动完成 (用时 ${waited}s)"
             wait_for_health
