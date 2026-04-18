@@ -264,3 +264,5 @@ run_single_task "indexcache"
 SERVER_ARGS=""
 run_single_task "src"
 
+python3 compare_summary_metrics.py "$OUTPUT_PATH" --skip-first 1 --output-csv "$OUTPUT_PATH/compare_total.csv"
+
